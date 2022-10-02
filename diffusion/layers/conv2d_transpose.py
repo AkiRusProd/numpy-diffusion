@@ -4,62 +4,61 @@ try:
 except:
     import numpy as np
     is_cupy_available = False
-
+    
 # from numba import njit
 
 
-class Conv2D():
+
+
+class Conv2DTranspose():
     """
-    Add 2d convolutional layer
-    --------------------------
+    Add 2d transposed convolutional layer
+    -------------------------------------
         Args:
             `kernels_num`: number of kernels
             `kernel_shape` (tuple), (list) of size 2 or (int): height and width of kernel 
             `activation` (str) or (`ActivationFunction` class): activation function
-            `padding` (tuple), (list) of size 2 or (int)  or `"same"`, `"real same"`, `"valid"` string value: the padding of the input window
+            `padding` (tuple), (list) of size 2 or (int)  or `"same"`, `"real same"`, `"valid"` string value: the "inverted" padding of the input window (removing padding)
             
             {
                 `"valid"`: padding is 0
                 `"same"`: keras "same" implementation, that returns the output of size "input_size + stride_size"
                 `"real same"`: my "same" implementation, that returns the output of size "input_size"
             }
-            `stride` (tuple), (list) of size 2 or (int): the stride of the sliding kernel
+            `stride` (tuple), (list) of size 2 or (int): the transposed stride (operation similar to dilation) of the 2d input window
             `dilation` (tuple), (list) of size 2 or (int): the dilation of the sliding kernel
             `use_bias` (bool):  `True` if used. `False` if not used
 
         Returns:
             output: output_layer (numpy.ndarray): the output layer with shape: (batch_size, channels_num, conv_height, conv_width)
         References:
-            https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
-
-            https://blog.ca.meron.dev/Vectorized-CNN/
-            
-            https://stackoverflow.com/questions/26089893/understanding-numpys-einsum
+            https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
     """
+    
+    def __init__(self, channels_num, kernels_num, kernel_shape, input_shape = None, activation = None, padding = (0, 0), stride = (1, 1), dilation = (1, 1), output_padding = (0, 0), use_bias = True, data_type = np.float32):
+        self.channels_num   = channels_num
+        self.kernels_num    = kernels_num
+        self.kernel_shape   = kernel_shape
+        self.input_shape    = input_shape
+        self.padding        = padding
+        self.stride         = stride
+        self.dilation       = dilation
+        self.output_padding = output_padding
+        self.activation     = activation
+        self.use_bias       = use_bias
 
-
-    def __init__(self, channels_num, kernels_num, kernel_shape, input_shape = None, activation = None, padding = (0, 0), stride = (1, 1), dilation = (1, 1), use_bias = True, data_type = np.float32):
-        self.channels_num = channels_num
-        self.kernels_num  = kernels_num
-        self.kernel_shape = kernel_shape
-        self.input_shape  = input_shape
-        self.padding      = padding
-        self.stride       = stride
-        self.dilation     = dilation
-        self.activation   = activation
-        self.use_bias     = use_bias
-          
         self.w = None
         self.b = None
 
         self.optimizer = None
         self.data_type = data_type
-        
+
         if input_shape != None:
             self.build()
 
     def set_optimizer(self, optimizer):
-        self.optimizer = optimizer 
+        self.optimizer = optimizer
+       
 
     def build(self):
         
@@ -71,11 +70,11 @@ class Conv2D():
         elif self.padding == "same" or self.padding == "real same":
 
             if self.padding == "same":
-                padding_up_down = self.dilation[0] * (self.kernel_height - 1) - self.stride[0] + 1 
-                padding_left_right = self.dilation[1] * (self.kernel_width  - 1) - self.stride[1] + 1
+                padding_up_down = (1 - self.stride[0]) + self.dilation[0] * (self.kernel_height - 1) + self.output_padding[0] 
+                padding_left_right = (1 - self.stride[1]) + self.dilation[1] * (self.kernel_width  - 1) + self.output_padding[1]
             elif self.padding == "real same":
-                padding_up_down = (self.stride[0] - 1) * (self.input_height - 1) + self.dilation[0] * (self.kernel_height - 1)
-                padding_left_right = (self.stride[1] - 1) * (self.input_width- 1) + self.dilation[1] * (self.kernel_width  - 1)
+                padding_up_down = (self.stride[0] - 1) * (self.input_height - 1) + self.dilation[0] * (self.kernel_height - 1) + self.output_padding[0]
+                padding_left_right = (self.stride[1] - 1) * (self.input_width- 1) + self.dilation[1] * (self.kernel_width  - 1) + self.output_padding[1]
 
             if padding_up_down % 2 == 0:
                 padding_up, padding_down = padding_up_down // 2, padding_up_down // 2
@@ -88,25 +87,21 @@ class Conv2D():
                 padding_left, padding_right = padding_left_right // 2, padding_left_right - padding_left_right // 2
     
 
-            self.padding = (abs(padding_up), abs(padding_down), abs(padding_left), abs(padding_right))
+            self.padding = (padding_up, padding_down, padding_left, padding_right)
 
         elif len(self.padding) == 2:
-            self.padding = (self.padding[0], self.padding[0], self.padding[1], self.padding[1]) #(up, down, left, right) padding ≃ (2 * vertical, 2 *horizontal) padding
-
-
-        self.conv_height = (self.input_height + self.padding[0] + self.padding[1] - self.dilation[0] * (self.kernel_height - 1) - 1) // self.stride[0]   + 1
-        self.conv_width =  (self.input_width + self.padding[2] + self.padding[3] - self.dilation[1] * (self.kernel_width - 1) - 1) // self.stride[1] + 1
-
-        self.dilated_kernel_height = self.dilation[0] * (self.kernel_height - 1) + 1
-        self.dilated_kernel_width  = self.dilation[1] * (self.kernel_width - 1) + 1
-
-        #input height and width for comparing with stride
-        self.stride_compared_input_height = (self.conv_height - 1) * self.stride[0] - self.padding[0] - self.padding[1] +  self.dilated_kernel_height
-        self.stride_compared_input_width = (self.conv_width - 1) * self.stride[1] - self.padding[2] - self.padding[3] +  self.dilated_kernel_width
+            self.padding = (self.padding[0], self.padding[0], self.padding[1], self.padding[1]) #(top, bottom, left, right) padding ≃ (2 * vertical, 2 *horizontal) padding
     
-        self.prepared_input_height = (self.stride_compared_input_height + self.padding[0] + self.padding[1])
-        self.prepared_input_width = (self.stride_compared_input_width + self.padding[2] + self.padding[3])
+        
+        self.conv_height = (self.input_height - 1) * self.stride[0] - (self.padding[0] + self.padding[1])  +  self.dilation[0] * (self.kernel_height - 1) + self.output_padding[0] + 1
+        self.conv_width =  (self.input_width - 1) * self.stride[1] - (self.padding[2] + self.padding[3]) + self.dilation[1] * (self.kernel_width - 1) + self.output_padding[1] + 1
+        
+        self.dilated_kernel_height = self.dilation[0] * (self.kernel_height - 1) + 1
+        self.dilated_kernel_width = self.dilation[1] * (self.kernel_width - 1) + 1
 
+        self.prepared_input_height = (self.input_height - 1) * self.stride[0] + 1 - (self.padding[0] + self.padding[1]) + self.output_padding[0] + 2 * self.dilated_kernel_height - 2
+        self.prepared_input_width = (self.input_width - 1) * self.stride[1] + 1 - (self.padding[2] + self.padding[3])+ self.output_padding[1] + 2 * self.dilated_kernel_width - 2
+       
         # self.w = np.random.normal(0, pow(self.kernel_height * self.kernel_width, -0.5), (self.kernels_num, self.channels_num, self.kernel_height, self.kernel_width)).astype(self.data_type)
         stdv = 1. / np.sqrt(self.channels_num * self.prepared_input_height * self.prepared_input_width)
 
@@ -122,7 +117,7 @@ class Conv2D():
         self.vb_hat, self.mb_hat = np.zeros_like(self.b).astype(self.data_type), np.zeros_like(self.b.astype(self.data_type)) # optimizers params
 
         self.output_shape = (self.kernels_num, self.conv_width, self.conv_height)
-
+        
 
     #Vectorized Forward and Backward Methods #######################################################################
     def forward(self, X):
@@ -131,100 +126,83 @@ class Conv2D():
             self.input_shape = X.shape[2: ] # from (B, C, H, W) take (H, W)
             self.build()
 
-        self.input_data = self.set_padding(X, self.padding)#.astype(self.data_type)
+        self.input_data = self.prepare_inputs(X)
         self.w = self.set_stride(self.w, self.dilation)
 
         self.batch_size = len(self.input_data)
-
+        
 
         batch_str, channel_str, kern_h_str, kern_w_str = self.input_data.strides
         self.windows = np.lib.stride_tricks.as_strided(
             self.input_data,
             (self.batch_size, self.channels_num, self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width),
-            (batch_str, channel_str, self.stride[0] * kern_h_str, self.stride[1] * kern_w_str, kern_h_str, kern_w_str)
+            (batch_str, channel_str, kern_h_str, kern_w_str, kern_h_str, kern_w_str)
         )#.astype(self.data_type)
 
         self.output_data = np.einsum('bihwkl,oikl->bohw', self.windows, self.w)
 
         self.output_data += self.b[None, :, None, None]
-        
+
         return self.output_data
 
 
     def backward(self, error):
         error = error.astype(self.data_type)
-        error_pattern = np.zeros((
-                        self.batch_size,
-                        self.kernels_num, 
-                        self.stride[0] * self.conv_height - (self.stride[0] - 1) +  2 * (self.dilated_kernel_height - 1),     
-                        self.stride[1] * self.conv_width - (self.stride[1] - 1) +  2 * (self.dilated_kernel_width - 1),      
-                        ),
-                        dtype = self.data_type
-                        )#.astype(self.data_type)
-
-        temp_error = np.zeros(
-            (   self.batch_size,
-                self.kernels_num, 
-                self.stride[0] * self.conv_height - (self.stride[0] - 1),
-                self.stride[1] * self.conv_width - (self.stride[1] - 1),
-            ),
-            dtype=self.data_type
-        )#.astype(self.data_type)
-
-        temp_error[:, :, ::self.stride[0], ::self.stride[1]]  = error
-
-        error_pattern[
-                    :,
-                    :,
-                    self.dilated_kernel_height - 1 : self.stride[0] * self.conv_height - (self.stride[0] - 1) + self.dilated_kernel_height - 1,
-                    self.dilated_kernel_width - 1 :  self.stride[1] * self.conv_width - (self.stride[1] - 1) + self.dilated_kernel_width - 1,
-                ] = temp_error
-
         
+        error_pattern = np.zeros((
+                self.batch_size,
+                self.kernels_num, 
+                self.prepared_input_height + int(np.max(np.array([self.conv_height, self.dilated_kernel_height]))) - 1, 
+                self.prepared_input_width + int(np.max(np.array([self.conv_width, self.dilated_kernel_width]))) - 1
+                ),
+                dtype = self.data_type
+                )
+       
+        error_pattern[
+            :,
+            :,
+            self.dilated_kernel_height - 1 : self.conv_height + self.dilated_kernel_height - 1,
+            self.dilated_kernel_width - 1 : self.conv_width + self.dilated_kernel_width - 1,
+        ] = error
+
         batch_str, channel_str, kern_h_str, kern_w_str = error_pattern.strides
         error_windows = np.lib.stride_tricks.as_strided(error_pattern,
             (self.batch_size, self.kernels_num, self.prepared_input_height, self.prepared_input_width, self.dilated_kernel_height, self.dilated_kernel_width),
-            (batch_str, channel_str, 1 * kern_h_str, 1 * kern_w_str, kern_h_str, kern_w_str)
-        )#.astype(self.data_type)
+            (batch_str, channel_str, kern_h_str, kern_w_str, kern_h_str, kern_w_str)
+        )
 
-        w_rot_180 = np.rot90(self.w, 2, axes=(2, 3))#.astype(self.data_type)
+        w_rot_180 = np.rot90(self.w, 2, axes=(2, 3))
 
         self.grad_w = np.einsum('bihwkl,bohw->oikl', self.windows, error)
         self.grad_b = np.sum(error, axis=(0, 2, 3))
 
         conv_backprop_error = np.einsum('bohwkl,oikl->bihw', error_windows, w_rot_180)
-        conv_backprop_error = self.set_padding(conv_backprop_error, (0, self.input_height - self.stride_compared_input_height, 0, self.input_width - self.stride_compared_input_width))#.astype(self.data_type)
-        conv_backprop_error = self.remove_padding(conv_backprop_error, self.padding)#.astype(self.data_type)
+        conv_backprop_error = self.prepare_error(conv_backprop_error)
 
         self.w = self.remove_stride(self.w, self.dilation)
         self.grad_w = self.remove_stride(self.grad_w, self.dilation)
+
         
         return conv_backprop_error
     ###############################################################################################################
 
 
 
-
-     
     # #Naive Forward and Backward methods ###########################################################################
     # def naive_forward_prop(self, X, training):
-    #     if self.input_shape == None:
-    #         self.input_shape = X.shape[2: ] # from (B, C, H, W) take (H, W)
-    #         self.build()
+    #     self.input_data = self.prepare_inputs(X)
+    #     self.w = self.set_stride(self.w, self.dilation) #prepare dilated kernels
 
-    #     self.input_data = self.set_padding(X, self.padding)
-    #     self.w = self.set_stride(self.w, self.dilation)
-        
     #     self.batch_size = len(self.input_data)
-
-    #     self.output_data = self._naive_forward_prop(self.input_data, self.w, self.b, self.batch_size, self.channels_num, self.kernels_num, self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width, self.stride)
+        
+    #     self.output_data = self._naive_forward_prop(self.input_data, self.w, self.b, self.batch_size, self.channels_num, self.kernels_num, self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width)
 
     #     return self.activation.function(self.output_data)
 
-    
+
     # @staticmethod
-    # # @njit
-    # def _naive_forward_prop(input_data, weights, bias, batch_size, channels_num, kernels_num, conv_height, conv_width, kernel_height, kernel_width, stride):
+    # @njit
+    # def _naive_forward_prop(input_data, weights, bias, batch_size, channels_num, kernels_num, conv_height, conv_width, kernel_height, kernel_width):
     #     conv_layer = np.zeros((batch_size, kernels_num, conv_height, conv_width))
 
     #     for b in range(batch_size):
@@ -234,61 +212,51 @@ class Conv2D():
     #                     for w in range(conv_width):
                             
     #                         conv_layer[b, k, h, w] += (
-    #                             np.sum(input_data[b, c, h * stride[0] : h * stride[0] + kernel_height, w * stride[1] : w * stride[1] + kernel_width] *  weights[k, c]
+    #                             np.sum(input_data[b, c, h : h + kernel_height, w  : w  + kernel_width] *  weights[k, c]
     #                             )
     #                             + bias[k]
     #                         )
-
+        
     #     return conv_layer
-
 
     # def naive_backward_prop(self, error):
     #     error *= self.activation.derivative(self.output_data)
         
-    #     self.grad_w = self.compute_weights_gradients(error, self.input_data, self.w, self.batch_size, self.channels_num, self.kernels_num,  self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width, self.stride)
+    #     self.grad_w = self.compute_weights_gradients(error, self.input_data, self.w, self.batch_size, self.channels_num, self.kernels_num,  self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width)
     #     self.grad_b = self.compute_bias_gradients(error)
-
-    #     conv_backprop_error = self._naive_backward_prop(error, self.w, self.batch_size, self.channels_num, self.kernels_num, self.prepared_input_height, self.prepared_input_width, self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width, self.stride)
-    #     conv_backprop_error = self.set_padding(conv_backprop_error, (0, self.input_height - self.stride_compared_input_height, 0, self.input_width - self.stride_compared_input_width))
-    #     conv_backprop_error = self.remove_padding(conv_backprop_error, self.padding)
+        
+    #     conv_backprop_error = self._naive_backward_prop(error, self.w, self.batch_size, self.channels_num, self.kernels_num, self.prepared_input_height, self.prepared_input_width, self.conv_height, self.conv_width, self.dilated_kernel_height, self.dilated_kernel_width)
+    #     conv_backprop_error = self.prepare_error(conv_backprop_error)
 
     #     self.w = self.remove_stride(self.w, self.dilation)
     #     self.grad_w = self.remove_stride(self.grad_w, self.dilation)
-
+        
     #     return conv_backprop_error
 
 
     # @staticmethod
-    # # @njit
-    # def _naive_backward_prop(error, weights, batch_size, channels_num, kernels_num, input_height, input_width, conv_height, conv_width, kernel_height, kernel_width, stride):
+    # @njit
+    # def _naive_backward_prop(error, weights, batch_size, channels_num, kernels_num, input_height, input_width, conv_height, conv_width, kernel_height, kernel_width):
 
     #     w_rot_180 = weights.copy()
         
     #     error_pattern = np.zeros((
     #                     batch_size,
     #                     kernels_num, 
-    #                     stride[0] * conv_height - (stride[0] - 1) +  2 * (kernel_height - 1),     #input_height + np.max(np.array([conv_height, kernel_height])) - 1, 
-    #                     stride[1] * conv_width - (stride[1] - 1) +  2 * (kernel_width - 1),       #input_width + np.max(np.array([conv_width, kernel_width])) - 1
+    #                     input_height + np.max(np.array([conv_height, kernel_height])) - 1, 
+    #                     input_width + np.max(np.array([conv_width, kernel_width])) - 1
     #                     ))
 
     #     conv_backprop_error = np.zeros((batch_size, channels_num, input_height, input_width))
 
-    #     temp_error = np.zeros(
-    #         (   batch_size,
-    #             kernels_num, 
-    #             stride[0] * conv_height - (stride[0] - 1),
-    #             stride[1] * conv_width - (stride[1] - 1),
-    #         )
-    #     )
 
-    #     temp_error[:, :, ::stride[0], ::stride[1]]  = error
 
     #     error_pattern[
     #                 :,
     #                 :,
-    #                 kernel_height - 1 : stride[0] * conv_height - (stride[0] - 1) + kernel_height - 1, #kernel_height - 1 : conv_height + kernel_height - 1,
-    #                 kernel_width - 1 :  stride[1] * conv_width - (stride[1] - 1) + kernel_width - 1,   #kernel_width - 1 :  conv_width  + kernel_width - 1,
-    #             ] = temp_error
+    #                 kernel_height - 1 : conv_height + kernel_height - 1,
+    #                 kernel_width - 1 : conv_width + kernel_width - 1,
+    #             ] = error
 
     #     for k in range(kernels_num):
     #         for c in range(channels_num):
@@ -305,49 +273,77 @@ class Conv2D():
     #                             error_pattern[b, k, h : h + kernel_height, w : w + kernel_width] * w_rot_180[k, c]
     #                         )
     
-    #     return conv_backprop_error
-        
+    #     return conv_backprop_error 
 
     # @staticmethod
-    # # @njit
-    # def compute_weights_gradients(error, input_data, weights, batch_size, channels_num, kernels_num, conv_height, conv_width, kernel_height, kernel_width, stride):
-
+    # @njit
+    # def compute_weights_gradients(error, input_data, weights, batch_size, channels_num, kernels_num, conv_height, conv_width, kernel_height, kernel_width):
+        
     #     gradient = np.zeros((weights.shape))
-
-    #     temp_error = np.zeros(
-    #         (
-    #             stride[0] * conv_height - (stride[0] - 1),
-    #             stride[1] * conv_width - (stride[1] - 1),
-    #         )
-    #     )
 
     #     for b in range(batch_size):
     #         for k in range(kernels_num):
     #             for c in range(channels_num):
     #                 for h in range(kernel_height):
     #                     for w in range(kernel_width):
-    #                         temp_error[::stride[0], ::stride[1]] = error[b, k]
-
+                            
     #                         gradient[k, c, h, w] += np.sum(
-    #                             temp_error
-    #                             * input_data[b, c, h : h + stride[0] * conv_height - (stride[0] - 1), w : w + stride[1] * conv_width - (stride[1] - 1)]
+    #                             error[b, k]
+    #                             * input_data[b, c, h : h + conv_height, w : w + conv_width]
     #                         )
 
-
     #     return gradient
+
 
     # @staticmethod
     # def compute_bias_gradients(error):
 
     #     return np.sum(error, axis = (0, 2, 3))
 
-
     # ###############################################################################################################
+
 
     def update_weights(self, layer_num):
         self.w, self.v, self.m, self.v_hat, self.m_hat  = self.optimizer.update(self.grad_w, self.w, self.v, self.m, self.v_hat, self.m_hat, layer_num)
         if self.use_bias == True:
             self.b, self.vb, self.mb, self.vb_hat, self.mb_hat  = self.optimizer.update(self.grad_b, self.b, self.vb, self.mb, self.vb_hat, self.mb_hat, layer_num)
+
+    def prepare_inputs(self, input_data):
+
+        temp_strided = self.set_stride(input_data, self.stride) #ADD STRIDING
+
+        #add output_padding here #WARNING output padding must be smaller than either stride or dilation,
+        temp_out = np.zeros((temp_strided.shape[0], 
+                                       temp_strided.shape[1], 
+                                       temp_strided.shape[2] + self.output_padding[0],
+                                       temp_strided.shape[3] + self.output_padding[1]))
+        temp_out[:, :, : temp_strided.shape[2], : temp_strided.shape[3]] = temp_strided #ADD output_padding
+
+        input_data = np.zeros((#add kernel padding
+                        input_data.shape[0],
+                        input_data.shape[1], 
+                        temp_out.shape[2] + 2 * (self.dilated_kernel_height - 1), 
+                        temp_out.shape[3] + 2 * (self.dilated_kernel_width  - 1)
+                        ))
+
+        input_data[:, :, self.dilated_kernel_height - 1 : temp_out.shape[2] + self.dilated_kernel_height - 1, 
+                            self.dilated_kernel_width - 1 : temp_out.shape[3] + self.dilated_kernel_width - 1] = temp_out
+
+        input_data = self.remove_padding(input_data, self.padding)#ADD remove padding #in conv2dTranspose set padding equals remove padding
+        return input_data
+
+
+    def prepare_error(self, error):
+       
+        padded_error = self.set_padding(error, self.padding)#ADD set padding that we removed in forward #in conv2dTranspose set padding equals remove padding
+
+        error = padded_error[:, :, self.dilated_kernel_height - 1 : padded_error.shape[2] - (self.dilated_kernel_height - 1) - self.output_padding[0], #remove kernel padding that we added
+                            self.dilated_kernel_width - 1 : padded_error.shape[3] - (self.dilated_kernel_width - 1) - self.output_padding[1]].copy()
+        
+        unstrided_error = self.remove_stride(error, self.stride)
+        
+        return unstrided_error
+
 
     @staticmethod
     # @njit
@@ -359,7 +355,7 @@ class Conv2D():
                 layer.shape[1],
                 layer.shape[2] + padding[0] + padding[1],
                 layer.shape[3] + padding[2] + padding[3],
-            ), dtype=layer.dtype,
+            )
         )
 
         padded_layer[
@@ -381,7 +377,7 @@ class Conv2D():
                 layer.shape[1],
                 layer.shape[2] - padding[0] - padding[1],
                 layer.shape[3] - padding[2] - padding[3],
-            ), dtype=layer.dtype,
+            )
         )
         
         unpadded_layer = layer[
@@ -392,6 +388,8 @@ class Conv2D():
                 ]
 
         return unpadded_layer
+
+
 
     @staticmethod
     # @njit
@@ -431,7 +429,5 @@ class Conv2D():
     def get_grads(self):
         return self.grad_w, self.grad_b
 
-    def set_grads(self, grad):
-        self.grad_w, self.grad_b = grad
- 
-
+    def set_grads(self, grads):
+        self.grad_w, self.grad_b = grads

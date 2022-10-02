@@ -24,6 +24,7 @@ from diffusion.losses import MSE
 from diffusion.optimizers import Adam, SGD, Momentum, Nadam
 from diffusion.activations import LeakyReLU
 from diffusion.models.simple_convnet import SimpleConvNet
+from diffusion.models.unet import SimpleUNet
 
 # https://huggingface.co/blog/annotated-diffusion
 # https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
@@ -67,7 +68,7 @@ def linear_schedule(start: float, end: float, timesteps: int):
 
 
 class Diffusion():
-    def __init__(self, model: Type[SimpleConvNet], timesteps: int, beta_start: float, beta_end: float, criterion, optimizer):
+    def __init__(self, model, timesteps: int, beta_start: float, beta_end: float, criterion, optimizer):
         self.model = model
 
         self.beta_start = beta_start
@@ -99,7 +100,7 @@ class Diffusion():
        
         x_t = self.sqrt_alphas_cumprod[timesteps_selection, None, None, None] * x + self.sqrt_one_minus_alphas_cumprod[timesteps_selection, None, None, None] * noise
 
-        x = self.model.forward(x_t)
+        x = self.model.forward(x_t, timesteps_selection / self.timesteps)
 
         return x, noise
 
@@ -111,7 +112,7 @@ class Diffusion():
      
         for t in reversed(range(0, self.timesteps)):
             noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
-            output = cp.asnumpy(self.model.forward(x_t, t / self.timesteps))
+            output = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps))
 
             x_t = self.inv_sqrt_alphas[t] * (x_t - output.reshape(n_sample, *image_size) * self.scaled_alphas[t]) + self.sqrt_betas[t] * noise
 
@@ -190,6 +191,6 @@ class Diffusion():
 
 
 
-diffusion = Diffusion(model = SimpleConvNet(), timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4))
+diffusion = Diffusion(model = SimpleUNet(), timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4))
 diffusion.train(training_inputs, epochs = 30, batch_size = 10, save_every_epochs = 1)
 

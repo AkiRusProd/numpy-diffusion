@@ -131,3 +131,5 @@ dmypy.json
 
 # Others
 dataset/
+tests/
+diffusion_copy.py

@@ -12,24 +12,26 @@ from diffusion.activations import Sigmoid, Softmax, ReLU, LeakyReLU
 
 
 class SimpleConvNet(): #Just example
-    def __init__(self):
+    def __init__(self, channels_num = 32):
+
+        channels = [channels_num, channels_num * 2, channels_num * 4, channels_num * 8]
         
         self.layers = [
-            Conv2D(input_shape = (1, 28, 28),   kernels_num = 32, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = 1, kernels_num = channels[0], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (32, 28, 28),  kernels_num = 64, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = channels[0],  kernels_num = channels[1], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (64, 28, 28), kernels_num = 128, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = channels[1], kernels_num = channels[2], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (128, 28, 28), kernels_num = 256, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = channels[2], kernels_num = channels[3], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (256, 28, 28), kernels_num = 128, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = channels[3], kernels_num = channels[2], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (128, 28, 28), kernels_num = 64, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = channels[2], kernels_num = channels[1], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (64, 28, 28), kernels_num = 32, kernel_shape = (7, 7), padding = (3, 3, 3, 3)),
+            Conv2D(channels_num = channels[1], kernels_num = channels[0], kernel_shape = (7, 7), padding = (3, 3)),
             LeakyReLU(),
-            Conv2D(input_shape = (32, 28, 28),  kernels_num = 1, kernel_shape = (3, 3), padding = (1, 1, 1, 1))
+            Conv2D(channels_num = channels[0], kernels_num = 1, kernel_shape = (3, 3), padding = (1, 1))
         ]
     
     def forward(self, x, t = None):

@@ -65,6 +65,8 @@ class Dense():
 
     def forward(self, X, training = True): 
         self.input_data = X
+        if len(X.shape) == 3 and X.shape[1] == 1:
+            self.input_data = self.input_data.reshape(X.shape[0], X.shape[2])
        
         self.batch_size = len(self.input_data)
 
@@ -73,8 +75,10 @@ class Dense():
         return self.output_data
 
     def backward(self, error):
-        self.grad_w = np.sum(np.matmul(self.input_data.transpose(0, 2, 1), error), axis = 0)
-        self.grad_b = np.sum(error, axis = (0, 1))
+        # self.grad_w = np.sum(np.matmul(self.input_data.transpose(0, 2, 1), error), axis = 0) #for 3d input
+        # self.grad_b = np.sum(error, axis = (0, 1))
+        self.grad_w = np.dot(self.input_data.T, error)
+        self.grad_b = np.sum(error, axis = 0)
 
         output_error = np.dot(error, self.w.T)
 
