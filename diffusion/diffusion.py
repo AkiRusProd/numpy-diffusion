@@ -12,6 +12,8 @@ except:
 
 
 import sys
+import os
+import pickle as pkl
 from pathlib import Path
 sys.path[0] = str(Path(sys.path[0]).parent)
 
@@ -23,8 +25,8 @@ from diffusion.layers import Dense, Conv2D, BatchNormalization
 from diffusion.losses import MSE
 from diffusion.optimizers import Adam, SGD, Momentum, Nadam
 from diffusion.activations import LeakyReLU
-from diffusion.models.simple_convnet import SimpleConvNet
-from diffusion.models.unet import SimpleUNet
+from diffusion.architectures.simple_convnet import SimpleConvNet
+from diffusion.architectures.unet import SimpleUNet
 
 # https://huggingface.co/blog/annotated-diffusion
 # https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
@@ -89,6 +91,27 @@ class Diffusion():
 
         self.criterion = criterion
         self.optimizer = optimizer
+
+
+    def load(self, path: str):
+        pickle_model = open(f'{path}/model.pkl', 'rb')
+        self.model = pkl.load(pickle_model)
+
+        pickle_model.close()
+
+        print(f'Loaded from "{path}"')
+
+    def save(self, path: str):
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        pickle_model = open(f'{path}/model.pkl', 'wb')
+        pkl.dump(self.model, pickle_model)
+
+        pickle_model.close()
+
+        print(f'Saved to "{path}"')
+
 
 
 
@@ -193,6 +216,8 @@ class Diffusion():
                     images_grid_in_time.append(self.get_images_set(x_num, y_num, margin, sample, (channels, image_size, image_size)))
 
                 images_grid_in_time[0].save(f"saved images/np_ddpm_in_time_{epoch + 1}.gif", save_all = True, append_images=images_grid_in_time[1:], duration = 50, loop = 0)
+
+                self.save(f"diffusion/saved models/np_ddpm")
                 
                 
                
