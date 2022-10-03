@@ -106,17 +106,20 @@ class Diffusion():
 
 
 
-    def denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int]):
+    def denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], step_size: int):
 
         x_t = np.random.normal(size = (n_sample, *image_size))
-     
+        x_ts = []
         for t in reversed(range(0, self.timesteps)):
             noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
             output = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps))
 
             x_t = self.inv_sqrt_alphas[t] * (x_t - output.reshape(n_sample, *image_size) * self.scaled_alphas[t]) + self.sqrt_betas[t] * noise
 
-        return x_t
+            if t % step_size == 0:
+                x_ts.append(x_t)
+
+        return x_t, x_ts
 
     def get_images_set(self, x_num: int, y_num: int, margin: int, images: np.float32, image_size: Tuple[int, int, int]):
 
@@ -181,10 +184,19 @@ class Diffusion():
 
             if ((epoch + 1) % save_every_epochs == 0):
 
-                samples = self.denoise_sample(x_num * y_num, (channels, image_size, image_size))
+                samples, samples_in_time = self.denoise_sample(x_num * y_num, (channels, image_size, image_size), step_size = 10)
                 images_grid = self.get_images_set(x_num, y_num, margin, samples, (channels, image_size, image_size))
                 images_grid.save(f"saved images/np_ddpm_{epoch + 1}.png")
 
+                images_grid_in_time = []
+                for sample in samples_in_time:
+                    images_grid_in_time.append(self.get_images_set(x_num, y_num, margin, sample, (channels, image_size, image_size)))
+
+                images_grid_in_time[0].save(f"saved images/np_ddpm_in_time_{epoch + 1}.gif", save_all = True, append_images=images_grid_in_time[1:], duration = 50, loop = 0)
+                
+                
+               
+                
             loss_history.append(epoch_loss)
 
         return loss_history
