@@ -130,6 +130,10 @@ dmypy.json
 
 
 # Others
-dataset/
+# dataset/
+*.csv
+*.gz
+cifar-10-batches-py/
+saved models/
 tests/
 diffusion_copy.py

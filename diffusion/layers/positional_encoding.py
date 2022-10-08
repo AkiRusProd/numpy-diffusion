@@ -44,3 +44,28 @@ class PositionalEncoding():
 
         return error
 
+
+# class PositionalEncoding():
+#     """ Implements the sinusoidal positional encoding.
+#     """
+
+#     def __init__(self, max_len, d_model, data_type = np.float32):
+#         self.d_model = d_model
+#         self.data_type = data_type
+
+
+#     def forward(self, x):
+#         half_dim = self.d_model // 2
+#         embeddings = np.log(10000) / (half_dim - 1)
+#         embeddings = np.exp(np.arange(half_dim) * -embeddings)
+#         embeddings = x[:, None] * embeddings[None, :]
+#         embeddings = np.concatenate((np.sin(embeddings), np.cos(embeddings)), axis = -1)
+#         return embeddings.astype(self.data_type)
+      
+      
+
+#     def backward(self, error):
+#         """ error: (batch_size, seq_len, d_model)
+#         """
+
+#         return error

@@ -1,0 +1,1 @@
+For training examples you need to download the datasets from the link: https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz and extract them into this folder or run the import_cifar_10_data script.

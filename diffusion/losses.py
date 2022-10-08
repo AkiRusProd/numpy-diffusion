@@ -18,7 +18,7 @@ class MSE():
     def derivative(self, y, t):
         y = np.asarray(y)
         t = np.asarray(t)
-        return -2 * (t - y) #/ np.prod(np.asarray(y.shape[1:]))
+        return -2 * (t - y) / np.prod(np.asarray(y.shape[1:]))
 
 
 class BinaryCrossEntropy():

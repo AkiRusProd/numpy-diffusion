@@ -21,45 +21,10 @@ from tqdm import tqdm
 from PIL import Image
 from typing import Type, Union, List, Tuple, Dict, Optional, Callable
 
-from diffusion.layers import Dense, Conv2D, BatchNormalization
-from diffusion.losses import MSE
-from diffusion.optimizers import Adam, SGD, Momentum, Nadam
-from diffusion.activations import LeakyReLU
-from diffusion.architectures.simple_convnet import SimpleConvNet
-from diffusion.architectures.unet import SimpleUNet
 
 # https://huggingface.co/blog/annotated-diffusion
 # https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
 # https://nn.labml.ai/diffusion/ddpm/index.html
-
-
-training_data = open('dataset/mnist_train.csv','r').readlines()
-test_data = open('dataset/mnist_test.csv','r').readlines()
-
-
-
-
-
-x_num, y_num = 4, 4
-channels, image_size = 1, 28
-margin = 10
-
-
-def prepare_data(data):
-    inputs, targets = [], []
-
-    for raw_line in tqdm(data, desc = 'preparing data'):
-
-        line = raw_line.split(',')
-    
-        inputs.append(np.asfarray(line[1:]).reshape(channels, image_size, image_size) / 127.5 - 1)#/ 255 [0; 1]  #/ 127.5-1 [-1; 1]
-        targets.append(int(line[0]))
-
-    return inputs, targets
-
-training_inputs, training_targets = prepare_data(training_data)
-
-
 
 
 
@@ -70,7 +35,7 @@ def linear_schedule(start: float, end: float, timesteps: int):
 
 
 class Diffusion():
-    def __init__(self, model, timesteps: int, beta_start: float, beta_end: float, criterion, optimizer):
+    def __init__(self, timesteps: int, beta_start: float, beta_end: float, criterion, optimizer, model = None):
         self.model = model
 
         self.beta_start = beta_start
@@ -88,6 +53,11 @@ class Diffusion():
         self.sqrt_one_minus_alphas_cumprod = np.sqrt(1 - self.alphas_cumprod)
 
         self.scaled_alphas =  (1 - self.alphas) / self.sqrt_one_minus_alphas_cumprod
+
+        # self.sqrt_recip_alphas = np.sqrt(1.0 / self.alphas)
+        # self.alphas_cumprod_prev = np.concatenate([np.array([1]), self.alphas_cumprod[:-1]]) #np.pad(alphas_cumprod[:-1], (1, 0), value=1.0)
+        # self.posterior_variance = self.betas * (1. - self.alphas_cumprod_prev) / (1. - self.alphas_cumprod)
+
 
         self.criterion = criterion
         self.optimizer = optimizer
@@ -123,7 +93,7 @@ class Diffusion():
        
         x_t = self.sqrt_alphas_cumprod[timesteps_selection, None, None, None] * x + self.sqrt_one_minus_alphas_cumprod[timesteps_selection, None, None, None] * noise
 
-        x = self.model.forward(x_t, timesteps_selection / self.timesteps)
+        x = self.model.forward(x_t, timesteps_selection / self.timesteps, training = True)
 
         return x, noise
 
@@ -135,9 +105,10 @@ class Diffusion():
         x_ts = []
         for t in reversed(range(0, self.timesteps)):
             noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
-            output = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps))
+            output = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False))
 
             x_t = self.inv_sqrt_alphas[t] * (x_t - output.reshape(n_sample, *image_size) * self.scaled_alphas[t]) + self.sqrt_betas[t] * noise
+            # x_t = self.sqrt_recip_alphas[t] * (x_t - self.betas[t] * output / self.sqrt_one_minus_alphas_cumprod[t]) + np.sqrt(self.posterior_variance[t]) * noise
 
             if t % step_size == 0:
                 x_ts.append(x_t)
@@ -146,8 +117,15 @@ class Diffusion():
 
     def get_images_set(self, x_num: int, y_num: int, margin: int, images: np.float32, image_size: Tuple[int, int, int]):
 
-        def normalize(x):
-            return (x - np.min(x)) / (np.max(x) - np.min(x)) * 255
+        def denormalize(x):
+            # if channels == 1:
+                return (x - np.min(x)) / (np.max(x) - np.min(x)) * 255
+            # else:
+            #     return (x - np.min(x, axis = (0, 1))) / (np.max(x, axis = (0, 1)) - np.min(x, axis = (0, 1))) * 255
+
+        # def normalize(x):
+
+        #     return (0.5 * x + 0.5) * 255 
 
         channels, H_size, W_size = image_size
 
@@ -158,7 +136,7 @@ class Diffusion():
                 y = i * (margin + H_size)
                 x = j * (margin + W_size)
 
-                images_array[y :y + H_size, x: x + W_size] = normalize(images[num].reshape(H_size, W_size, channels))
+                images_array[y :y + H_size, x: x + W_size] = denormalize(images[num].transpose(1, 2, 0)) #.reshape(H_size, W_size, channels)
 
                 num += 1
 
@@ -171,7 +149,9 @@ class Diffusion():
 
 
 
-    def train(self, dataset, epochs, batch_size = 128, save_every_epochs = 10):
+    def train(self, dataset, epochs, batch_size, save_every_epochs, image_path, save_path, image_size):
+        channels, H_size, W_size = image_size
+
         self.model.set_optimizer(self.optimizer)
 
         data_batches = np.array_split(dataset, np.arange(batch_size, len(dataset), batch_size))
@@ -204,20 +184,21 @@ class Diffusion():
                             f"loss: {epoch_loss:.7f} | epoch {epoch + 1}/{epochs}"
                     )
 
-
             if ((epoch + 1) % save_every_epochs == 0):
+                self.save(f"{save_path}")
 
-                samples, samples_in_time = self.denoise_sample(x_num * y_num, (channels, image_size, image_size), step_size = 10)
-                images_grid = self.get_images_set(x_num, y_num, margin, samples, (channels, image_size, image_size))
-                images_grid.save(f"saved images/np_ddpm_{epoch + 1}.png")
+                margin = 10
+                x_num, y_num = 5, 5
+
+                samples, samples_in_time = self.denoise_sample(x_num * y_num, (channels, H_size, W_size), step_size = 10)
+                images_grid = self.get_images_set(x_num, y_num, margin, samples, (channels, H_size, W_size))
+                images_grid.save(f"{image_path}/np_ddpm_{epoch + 1}.png")
 
                 images_grid_in_time = []
                 for sample in samples_in_time:
-                    images_grid_in_time.append(self.get_images_set(x_num, y_num, margin, sample, (channels, image_size, image_size)))
+                    images_grid_in_time.append(self.get_images_set(x_num, y_num, margin, sample, (channels, H_size, W_size)))
 
-                images_grid_in_time[0].save(f"saved images/np_ddpm_in_time_{epoch + 1}.gif", save_all = True, append_images=images_grid_in_time[1:], duration = 50, loop = 0)
-
-                self.save(f"diffusion/saved models/np_ddpm")
+                images_grid_in_time[0].save(f"{image_path}/np_ddpm_in_time_{epoch + 1}.gif", save_all = True, append_images = images_grid_in_time[1:], duration = 50, loop = 0)
                 
                 
                
@@ -228,6 +209,5 @@ class Diffusion():
 
 
 
-diffusion = Diffusion(model = SimpleUNet(), timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4))
-diffusion.train(training_inputs, epochs = 30, batch_size = 10, save_every_epochs = 1)
+
 

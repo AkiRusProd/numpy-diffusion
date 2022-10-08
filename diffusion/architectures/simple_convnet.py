@@ -34,7 +34,7 @@ class SimpleConvNet(): #Just example
             Conv2D(channels_num = channels[0], kernels_num = 1, kernel_shape = (3, 3), padding = (1, 1))
         ]
     
-    def forward(self, x, t = None):
+    def forward(self, x, t = None, training = True):
         x = np.asarray(x)
 
         for layer in self.layers:

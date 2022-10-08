@@ -6,12 +6,12 @@ except:
     is_cupy_available = False
 
 
-from diffusion.layers import Dense, Conv2D, Conv2DTranspose, PositionalEncoding
+from diffusion.layers import Dense, Conv2D, Conv2DTranspose, PositionalEncoding, BatchNormalization2D
 from diffusion.activations import ReLU, LeakyReLU
 
 
 
-class Block():
+class ResBlock():
     def __init__(self, input_channels, output_channels, time_emb_dim, up = False):
         super().__init__()
         self.time_embedding =  Dense(time_emb_dim, output_channels)
@@ -26,14 +26,19 @@ class Block():
             self.transform = Conv2D(output_channels, output_channels, kernel_shape = (4, 4), stride = (2, 2),  padding = (1, 1))
 
         self.conv2 = Conv2D(output_channels, output_channels, kernel_shape = (3, 3), padding=(1, 1))
-        self.relu1  = LeakyReLU()
-        self.relu2  = LeakyReLU()
-        self.relu3  = LeakyReLU()
+        self.relu1  = LeakyReLU(alpha = 0.01)
+        self.relu2  = LeakyReLU(alpha = 0.01)
+        self.relu3  = LeakyReLU(alpha = 0.01)
+
+        self.bnorm1 = BatchNormalization2D(output_channels, momentum = 0.1, epsilon = 1e-5)
+        self.bnorm2 = BatchNormalization2D(output_channels, momentum = 0.1, epsilon = 1e-5)
         
-    def forward(self, x, t):
+        
+    def forward(self, x, t, training):
     
         x = self.conv1.forward(x)
         h = self.relu1.forward(x)
+        h = self.bnorm1.forward(h, training)
 
         t = self.time_embedding.forward(t)
         
@@ -46,6 +51,7 @@ class Block():
         
         h = self.conv2.forward(h)
         h = self.relu3.forward(h)
+        h = self.bnorm2.forward(h, training)
  
 
         return self.transform.forward(h)
@@ -54,7 +60,7 @@ class Block():
         
         grad_h = self.transform.backward(grad)
 
-        
+        grad_h = self.bnorm2.backward(grad_h)
         grad_h = self.relu3.backward(grad_h)
         grad_h = self.conv2.backward(grad_h)
       
@@ -64,7 +70,7 @@ class Block():
         grad_time_emb = self.time_embedding.backward(grad_time_emb)
        
 
-        
+        grad_h = self.bnorm1.backward(grad_h)
         grad_h = self.relu1.backward(grad_h)
         grad_h = self.conv1.backward(grad_h)
        
@@ -73,54 +79,61 @@ class Block():
 
     def update_weights(self, layer_num):
         self.conv1.update_weights(layer_num)
-        self.time_embedding.update_weights(layer_num + 1)
-        self.conv2.update_weights(layer_num + 2)
-        self.transform.update_weights(layer_num + 3)
+        self.bnorm1.update_weights(layer_num + 1)
+        self.time_embedding.update_weights(layer_num + 2)
+        self.conv2.update_weights(layer_num + 3)
+        self.bnorm2.update_weights(layer_num + 4)
+        self.transform.update_weights(layer_num + 5)
 
-        return layer_num + 3
+        return layer_num + 5
 
     def set_optimizer(self, optimizer):
         self.transform.set_optimizer(optimizer)
         self.conv1.set_optimizer(optimizer)
         self.conv2.set_optimizer(optimizer)
+        self.bnorm1.set_optimizer(optimizer)
+        self.bnorm2.set_optimizer(optimizer)
         self.time_embedding.set_optimizer(optimizer)
 
 
 class SimpleUNet():
 
-    def __init__(self):
+    def __init__(self, image_channels,  image_size, down_channels = (32, 64, 128, 256, 512), up_channels = (512, 256, 128, 64, 32)):
       
-        image_channels = 1
-        down_channels = (32, 64, 128, 256, 512)
-        up_channels = (512, 256, 128, 64, 32)
-        noise_channels = 1
+        noise_channels = image_channels
         time_emb_dim = 32
 
        
         self.time_embedding = [
-                PositionalEncoding(max_len = 100, d_model = time_emb_dim),
+                PositionalEncoding(max_len = 1000, d_model = time_emb_dim),
                 Dense(time_emb_dim, time_emb_dim),
                 LeakyReLU()
             ]
         
        
-        self.input_conv = Conv2DTranspose(image_channels, down_channels[0], kernel_shape=(5, 5))
+        if image_size & (image_size - 1) != 0:
+            self.input_conv = Conv2DTranspose(image_channels, down_channels[0], kernel_shape=(5, 5))
+            self.output_conv = Conv2D(up_channels[-1], noise_channels,  kernel_shape=(5, 5))
+        else:
+            self.input_conv = Conv2D(image_channels, down_channels[0], kernel_shape=(3, 3), padding = (1, 1))
+            self.output_conv = Conv2DTranspose(up_channels[-1], noise_channels,  kernel_shape=(3, 3), padding = (1, 1))
 
        
-        self.down_layers  = [Block(down_channels[i], down_channels[i+1], time_emb_dim) for i in range(len(down_channels)-1)]
+        self.down_layers  = [ResBlock(down_channels[i], down_channels[i+1], time_emb_dim) for i in range(len(down_channels)-1)]
        
-        self.up_layers = [Block(up_channels[i], up_channels[i+1], time_emb_dim, up=True) for i in range(len(up_channels)-1)]
+        self.up_layers = [ResBlock(up_channels[i], up_channels[i+1], time_emb_dim, up=True) for i in range(len(up_channels)-1)]
 
-        self.output_conv = Conv2D(up_channels[-1], noise_channels,  kernel_shape=(5, 5))
+        
 
-    def forward(self, x, t):
+    def forward(self, x, t, training):
         x = np.asarray(x)
         
         t = np.asarray(t[:, None, None], dtype = np.float32)
 
         
         for layer in self.time_embedding:
-
+            
+            # t = t.reshape(t.shape[0], -1)
             t = layer.forward(t)
         t = t.reshape(t.shape[0], -1)
        
@@ -128,14 +141,14 @@ class SimpleUNet():
        
         residual_inputs = []
         for down_layer in self.down_layers:
-            x = down_layer.forward(x, t)
+            x = down_layer.forward(x, t, training)
             residual_inputs.append(x)
           
         for up_layer in self.up_layers:
             residual_x = residual_inputs.pop()
 
             x = np.concatenate((x, residual_x), axis = 1)      
-            x = up_layer.forward(x, t)
+            x = up_layer.forward(x, t, training)
         return self.output_conv.forward(x)
 
 
