@@ -10,6 +10,7 @@ except:
 
 
 import sys
+import os
 from pathlib import Path
 sys.path[0] = str(Path(sys.path[0]).parent)
 
@@ -45,7 +46,14 @@ def prepare_data(data):
 
     return inputs, targets
 
-training_inputs, training_targets = prepare_data(training_data)
+if not os.path.exists("dataset/mnist/mnist_train.npy"):
+    training_inputs, training_targets = prepare_data(training_data)
+    np.save("dataset/mnist/mnist_train.npy", training_inputs)
+    np.save("dataset/mnist/mnist_train_targets.npy", training_targets)
+else:
+    training_inputs = np.load("dataset/mnist/mnist_train.npy")
+    training_targets = np.load("dataset/mnist/mnist_train_targets.npy")
+
 
 
 diffusion = Diffusion(model = SimpleUNet(image_channels = 1, image_size = 28, down_channels = (32, 64, 128), up_channels = (128, 64, 32)), timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4))

@@ -118,14 +118,8 @@ class Diffusion():
     def get_images_set(self, x_num: int, y_num: int, margin: int, images: np.float32, image_size: Tuple[int, int, int]):
 
         def denormalize(x):
-            # if channels == 1:
-                return (x - np.min(x)) / (np.max(x) - np.min(x)) * 255
-            # else:
-            #     return (x - np.min(x, axis = (0, 1))) / (np.max(x, axis = (0, 1)) - np.min(x, axis = (0, 1))) * 255
-
-        # def normalize(x):
-
-        #     return (0.5 * x + 0.5) * 255 
+            return (x - np.min(x)) / (np.max(x) - np.min(x)) * 255
+       
 
         channels, H_size, W_size = image_size
 

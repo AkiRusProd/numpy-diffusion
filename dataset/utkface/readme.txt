@@ -1,0 +1,1 @@
+For training examples you need to download the UTKFace "Aligned&Cropped Faces" datasets from the link: https://susanqq.github.io/UTKFace/ and drop them into UTKFace folder or run the import_utkface_data script.

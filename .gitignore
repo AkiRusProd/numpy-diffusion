@@ -133,6 +133,8 @@ dmypy.json
 # dataset/
 *.csv
 *.gz
+*.chip.jpg
+*.npy
 cifar-10-batches-py/
 saved models/
 tests/
