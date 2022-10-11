@@ -20,7 +20,7 @@ sys.path[0] = str(Path(sys.path[0]).parent)
 from tqdm import tqdm
 from PIL import Image
 from typing import Type, Union, List, Tuple, Dict, Optional, Callable
-
+from diffusion.schedules import get_schedule
 
 # https://huggingface.co/blog/annotated-diffusion
 # https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
@@ -30,19 +30,15 @@ from typing import Type, Union, List, Tuple, Dict, Optional, Callable
 
 
 
-def linear_schedule(start: float, end: float, timesteps: int):
-    return np.linspace(start, end, timesteps)
-
-
 class Diffusion():
-    def __init__(self, timesteps: int, beta_start: float, beta_end: float, criterion, optimizer, model = None):
+    def __init__(self, timesteps: int, beta_start: float, beta_end: float, criterion, optimizer, model = None, schedule = "linear"):
         self.model = model
 
         self.beta_start = beta_start
         self.beta_end = beta_end
         self.timesteps = timesteps
 
-        self.betas = linear_schedule(beta_start, beta_end, timesteps)
+        self.betas = get_schedule(schedule, beta_start, beta_end, timesteps)
         self.sqrt_betas =  np.sqrt(self.betas)
 
         self.alphas = 1 - self.betas
