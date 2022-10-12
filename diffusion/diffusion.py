@@ -83,6 +83,9 @@ class Diffusion():
 
 
     def forward(self, x: np.float32, t = None):
+        """
+        Algorithm 1: Training; according to the paper
+        """
 
         timesteps_selection = np.random.randint(1, self.timesteps, (x.shape[0],))
         noise = np.random.normal(size = x.shape)
@@ -96,6 +99,9 @@ class Diffusion():
 
 
     def denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], step_size: int):
+        """
+        Algorithm 2: Sampling; according to the paper
+        """
 
         x_t = np.random.normal(size = (n_sample, *image_size))
         x_ts = []
