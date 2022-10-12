@@ -22,6 +22,9 @@ from PIL import Image
 from typing import Type, Union, List, Tuple, Dict, Optional, Callable
 from diffusion.schedules import get_schedule
 
+# https://arxiv.org/abs/2006.11239
+# https://arxiv.org/abs/2102.09672
+
 # https://huggingface.co/blog/annotated-diffusion
 # https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
 # https://nn.labml.ai/diffusion/ddpm/index.html
