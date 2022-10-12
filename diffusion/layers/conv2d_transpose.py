@@ -15,18 +15,19 @@ class Conv2DTranspose():
     Add 2d transposed convolutional layer
     -------------------------------------
         Args:
+            `channels_num`: number of input channels
             `kernels_num`: number of kernels
-            `kernel_shape` (tuple), (list) of size 2 or (int): height and width of kernel 
-            `activation` (str) or (`ActivationFunction` class): activation function
-            `padding` (tuple), (list) of size 2 or (int)  or `"same"`, `"real same"`, `"valid"` string value: the "inverted" padding of the input window (removing padding)
+            `kernel_shape` (tuple), (list) of size 2: height and width of kernel 
+            `input_shape` (tuple), (list) of size 2: height and width of input data
+            `padding` (tuple), (list) of size 2  or `"same"`, `"real same"`, `"valid"` string value: the "inverted" padding of the input window (removing padding)
             
             {
                 `"valid"`: padding is 0
                 `"same"`: keras "same" implementation, that returns the output of size "input_size + stride_size"
                 `"real same"`: my "same" implementation, that returns the output of size "input_size"
             }
-            `stride` (tuple), (list) of size 2 or (int): the transposed stride (operation similar to dilation) of the 2d input window
-            `dilation` (tuple), (list) of size 2 or (int): the dilation of the sliding kernel
+            `stride` (tuple), (list) of size 2: the transposed stride (operation similar to dilation) of the 2d input window
+            `dilation` (tuple), (list) of size 2: the dilation of the sliding kernel
             `use_bias` (bool):  `True` if used. `False` if not used
 
         Returns:
@@ -35,7 +36,7 @@ class Conv2DTranspose():
             https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
     """
     
-    def __init__(self, channels_num, kernels_num, kernel_shape, input_shape = None, activation = None, padding = (0, 0), stride = (1, 1), dilation = (1, 1), output_padding = (0, 0), use_bias = True, data_type = np.float32):
+    def __init__(self, channels_num, kernels_num, kernel_shape, input_shape = None, padding = (0, 0), stride = (1, 1), dilation = (1, 1), output_padding = (0, 0), use_bias = True, data_type = np.float32):
         self.channels_num   = channels_num
         self.kernels_num    = kernels_num
         self.kernel_shape   = kernel_shape
@@ -44,7 +45,6 @@ class Conv2DTranspose():
         self.stride         = stride
         self.dilation       = dilation
         self.output_padding = output_padding
-        self.activation     = activation
         self.use_bias       = use_bias
 
         self.w = None
