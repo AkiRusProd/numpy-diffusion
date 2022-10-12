@@ -56,26 +56,26 @@ class ResBlock():
 
         return self.transform.forward(h)
 
-    def backward(self, grad):
+    def backward(self, error):
         
-        grad_h = self.transform.backward(grad)
+        h_error = self.transform.backward(error)
 
-        grad_h = self.bnorm2.backward(grad_h)
-        grad_h = self.relu3.backward(grad_h)
-        grad_h = self.conv2.backward(grad_h)
+        h_error = self.bnorm2.backward(h_error)
+        h_error = self.relu3.backward(h_error)
+        h_error = self.conv2.backward(h_error)
       
        
-        grad_time_emb = np.sum(grad_h, axis = (2, 3))
-        grad_time_emb = self.relu2.backward(grad_time_emb)
-        grad_time_emb = self.time_embedding.backward(grad_time_emb)
+        t_error = np.sum(h_error, axis = (2, 3))
+        t_error = self.relu2.backward(t_error)
+        t_error = self.time_embedding.backward(t_error)
        
 
-        grad_h = self.bnorm1.backward(grad_h)
-        grad_h = self.relu1.backward(grad_h)
-        grad_h = self.conv1.backward(grad_h)
+        h_error = self.bnorm1.backward(h_error)
+        h_error = self.relu1.backward(h_error)
+        h_error = self.conv1.backward(h_error)
        
         
-        return grad_h, grad_time_emb
+        return h_error, t_error
 
     def update_weights(self, layer_num):
         self.conv1.update_weights(layer_num)

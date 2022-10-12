@@ -18,7 +18,7 @@ from tqdm import tqdm
 from diffusion.diffusion import Diffusion
 from diffusion.optimizers import Adam
 from diffusion.losses import MSE
-from diffusion.architectures.unet import SimpleUNet
+from diffusion.architectures import SimpleUNet
 
 
 

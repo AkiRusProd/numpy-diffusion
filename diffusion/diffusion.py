@@ -132,7 +132,7 @@ class Diffusion():
                 y = i * (margin + H_size)
                 x = j * (margin + W_size)
 
-                images_array[y :y + H_size, x: x + W_size] = denormalize(images[num].transpose(1, 2, 0)) #.reshape(H_size, W_size, channels)
+                images_array[y :y + H_size, x: x + W_size] = denormalize(images[num].transpose(1, 2, 0))
 
                 num += 1
 

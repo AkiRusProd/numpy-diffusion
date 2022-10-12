@@ -5,21 +5,21 @@ import numpy as np
 
 
 def linear_schedule(start, end, timesteps):
-    return np.linspace(start, end, timesteps)
+    return np.linspace(start, end, timesteps, dtype = np.float32)
 
 def quadratic_schedule(start, end, timesteps):
-    return np.linspace(start ** 0.5, end ** 0.5, timesteps) ** 2
+    return np.linspace(start ** 0.5, end ** 0.5, timesteps, dtype = np.float32) ** 2
 
 def exponential_schedule(start, end, timesteps):
-    return np.geomspace(start, end, timesteps)
+    return np.geomspace(start, end, timesteps, dtype = np.float32)
 
 def logarithmic_schedule(start, end, timesteps):
-    return np.logspace(np.log10(start), np.log10(end), timesteps)
+    return np.logspace(np.log10(start), np.log10(end), timesteps, dtype = np.float32)
 
 def sigmoid_schedule(start, end, timesteps):
 
-    betas = np.linspace(-6, 6, timesteps)
-    betas_sigmoid = 1 / (1 + np.exp(-betas))
+    betas = np.linspace(-6, 6, timesteps, dtype = np.float32)
+    betas_sigmoid = 1 / (1 + np.exp(-betas, dtype = np.float32))
 
     return betas_sigmoid * (end - start) + start
 
@@ -32,7 +32,7 @@ def cosine_schedule(start, end, timesteps):
 
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
     
-    return np.clip(betas, 0.01, 0.99)
+    return np.clip(betas, 0.01, 0.99).astype(np.float32)
 
 
 def get_schedule(schedule, start, end, timesteps):

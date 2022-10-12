@@ -19,7 +19,7 @@ from tqdm import tqdm
 from diffusion.diffusion import Diffusion
 from diffusion.optimizers import Adam
 from diffusion.losses import MSE
-from diffusion.architectures.unet import SimpleUNet
+from diffusion.architectures import SimpleUNet
 
 
 def prepare_data(path):
@@ -56,5 +56,5 @@ image_size = (3, 32, 32)
 
 diffusion = Diffusion(model = SimpleUNet(image_channels = 3, image_size = 32, down_channels = (128, 256, 512, 1024), up_channels = (1024, 512, 256, 128))
                     , timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4)) #alpha = 2e-4
-diffusion.load("diffusion/saved models/utkface_model")
+# diffusion.load("diffusion/saved models/utkface_model")
 diffusion.train(training_inputs, epochs = 30, batch_size = 5, save_every_epochs = 1, image_path = f"images/utkface", save_path = f"diffusion/saved models/utkface_model", image_size = image_size)
