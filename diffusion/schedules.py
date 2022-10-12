@@ -31,8 +31,8 @@ def cosine_schedule(start, end, timesteps):
     alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
 
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-
-    return np.clip(betas, 0.0001, 0.9999)
+    
+    return np.clip(betas, 0.01, 0.99)
 
 
 def get_schedule(schedule, start, end, timesteps):
