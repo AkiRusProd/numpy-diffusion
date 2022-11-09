@@ -85,4 +85,5 @@ Some methods were borrowed from my [numpy-nn-model](https://github.com/AkiRusPro
 - [The Annotated Diffusion Model](https://huggingface.co/blog/annotated-diffusion)
 - [What are diffusion models?](https://lilianweng.github.io/posts/2021-07-11-diffusion-models)
 - [Denoising Diffusion Probabilistic Models (DDPM)](https://nn.labml.ai/diffusion/ddpm/index.html)
+- [How diffusion models work: the math from scratch](https://theaisummer.com/diffusion-models)
 
