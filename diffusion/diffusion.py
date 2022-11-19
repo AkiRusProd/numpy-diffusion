@@ -87,6 +87,8 @@ class Diffusion():
 
     def forward(self, x: np.float32, t = None):
         """
+        https://arxiv.org/abs/2006.11239
+
         Algorithm 1: Training; according to the paper
         """
 
@@ -101,24 +103,54 @@ class Diffusion():
 
 
 
-    def denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], step_size: int):
+    def ddpm_denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], states_step_size: int):
         """
+        https://arxiv.org/abs/2006.11239
+
         Algorithm 2: Sampling; according to the paper
         """
 
         x_t = np.random.normal(size = (n_sample, *image_size))
         x_ts = []
-        for t in reversed(range(0, self.timesteps)):
+        for t in tqdm(reversed(range(0, self.timesteps)), desc = 'ddpm denoisinig samples', total = self.timesteps):
             noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
-            output = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False))
+            epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(n_sample, *image_size)
 
-            x_t = self.inv_sqrt_alphas[t] * (x_t - output.reshape(n_sample, *image_size) * self.scaled_alphas[t]) + self.sqrt_betas[t] * noise
-            # x_t = self.sqrt_recip_alphas[t] * (x_t - self.betas[t] * output / self.sqrt_one_minus_alphas_cumprod[t]) + np.sqrt(self.posterior_variance[t]) * noise
+            x_t = self.inv_sqrt_alphas[t] * (x_t - epsilon * self.scaled_alphas[t]) + self.sqrt_betas[t] * noise
+            # x_t = self.sqrt_recip_alphas[t] * (x_t - self.betas[t] * epsilon / self.sqrt_one_minus_alphas_cumprod[t]) + np.sqrt(self.posterior_variance[t]) * noise
 
-            if t % step_size == 0:
+            if t % states_step_size == 0:
                 x_ts.append(x_t)
 
         return x_t, x_ts
+
+    def ddim_denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], states_step_size: int, eta: float = 1., skip_steps: int = 10):
+        """
+        https://arxiv.org/abs/2010.02502
+
+        Denoising Diffusion Implicit Models (DDIM) sampling; according to the paper
+        """
+
+        x_t = np.random.normal(size = (n_sample, *image_size))
+        x_ts = []
+
+        for t in tqdm(reversed(range(1, self.timesteps, skip_steps)), desc = 'ddim denoisinig samples', total = self.timesteps//skip_steps): #0
+            noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
+            epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(n_sample, *image_size)
+
+            x0_t = (x_t - epsilon * np.sqrt(1 - self.alphas_cumprod[t])) / np.sqrt(self.alphas_cumprod[t])
+
+            sigma = eta * np.sqrt((1 - self.alphas_cumprod[t - 1]) / (1 - self.alphas_cumprod[t]) * (1 - self.alphas_cumprod[t] / self.alphas_cumprod[t - 1]))
+            c = np.sqrt((1 - self.alphas_cumprod[t - 1]) - sigma ** 2)
+
+            x_t = np.sqrt(self.alphas_cumprod[t - 1]) * x0_t - c * epsilon + sigma * noise
+           
+            if (t - 1) * skip_steps % states_step_size == 0:
+                x_ts.append(x_t)
+
+        return x_t, x_ts
+
+
 
     def get_images_set(self, x_num: int, y_num: int, margin: int, images: np.float32, image_size: Tuple[int, int, int]):
 
@@ -145,6 +177,21 @@ class Diffusion():
             return Image.fromarray(images_array.squeeze(axis = 2)).convert("L")
         else:
             return Image.fromarray(images_array)
+
+    def generate_sample(self, image_path = None, x_num = 5, y_num = 5, margin = 10, image_size = (3, 32, 32), step_size = 10, sample_method = 'ddpm'):
+
+        if sample_method == 'ddpm':
+            denoise_sample = self.ddpm_denoise_sample
+        elif sample_method == 'ddim':
+            denoise_sample = self.ddim_denoise_sample
+    
+        samples = denoise_sample(x_num * y_num, image_size, step_size)[0]
+        images_grid = self.get_images_set(x_num, y_num, margin, samples, image_size)
+
+        if image_path is not None:
+            images_grid.save(image_path)
+        
+        return images_grid
 
 
 
@@ -189,7 +236,7 @@ class Diffusion():
                 margin = 10
                 x_num, y_num = 5, 5
 
-                samples, samples_in_time = self.denoise_sample(x_num * y_num, (channels, H_size, W_size), step_size = 10)
+                samples, samples_in_time = self.ddpm_denoise_sample(x_num * y_num, (channels, H_size, W_size), step_size = 10)
                 images_grid = self.get_images_set(x_num, y_num, margin, samples, (channels, H_size, W_size))
                 images_grid.save(f"{image_path}/np_ddpm_{epoch + 1}.png")
 
