@@ -38,6 +38,7 @@ Some methods were borrowed from my [numpy-nn-model](https://github.com/AkiRusPro
 
 
 ## Samples
+> *At the moment, implemented DDPM and DDIM samplers. The results were obtained using the DDPM sampler*
 #### Samples of a model trained on 1-3 epochs on the MNIST dataset:
 <p align="center">
 <img src="images/mnist/np_ddpm_1.png" width=20% height=20%>
@@ -81,6 +82,7 @@ Some methods were borrowed from my [numpy-nn-model](https://github.com/AkiRusPro
 ### References:
 - [Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239)
 - [Improved Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2102.09672)
+- [Denoising Diffusion Implicit Models](https://arxiv.org/abs/2010.02502)
 ### Additional literature:
 - [The Annotated Diffusion Model](https://huggingface.co/blog/annotated-diffusion)
 - [What are diffusion models?](https://lilianweng.github.io/posts/2021-07-11-diffusion-models)
