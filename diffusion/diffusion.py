@@ -124,7 +124,7 @@ class Diffusion():
 
         return x_t, x_ts
 
-    def ddim_denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], states_step_size: int, eta: float = 1., skip_steps: int = 10):
+    def ddim_denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], states_step_size: int = 1, eta: float = 1., perform_steps: int = 100):
         """
         https://arxiv.org/abs/2010.02502
 
@@ -134,7 +134,7 @@ class Diffusion():
         x_t = np.random.normal(size = (n_sample, *image_size))
         x_ts = []
 
-        for t in tqdm(reversed(range(1, self.timesteps, skip_steps)), desc = 'ddim denoisinig samples', total = self.timesteps//skip_steps): #0
+        for t in tqdm(reversed(range(1, self.timesteps)[:perform_steps]), desc = 'ddim denoisinig samples', total = perform_steps):
             noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
             epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(n_sample, *image_size)
 
@@ -145,7 +145,7 @@ class Diffusion():
 
             x_t = np.sqrt(self.alphas_cumprod[t - 1]) * x0_t - c * epsilon + sigma * noise
            
-            if (t - 1) * skip_steps % states_step_size == 0:
+            if t % states_step_size == 0:
                 x_ts.append(x_t)
 
         return x_t, x_ts
@@ -185,7 +185,7 @@ class Diffusion():
         elif sample_method == 'ddim':
             denoise_sample = self.ddim_denoise_sample
     
-        samples = denoise_sample(x_num * y_num, image_size, step_size)[0]
+        samples = denoise_sample(x_num * y_num, image_size, states_step_size = step_size)[0]
         images_grid = self.get_images_set(x_num, y_num, margin, samples, image_size)
 
         if image_path is not None:
