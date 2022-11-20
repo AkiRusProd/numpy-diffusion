@@ -103,40 +103,63 @@ class Diffusion():
 
 
 
-    def ddpm_denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], states_step_size: int):
+    def ddpm_denoise_sample(self, sample_num = None, image_size = None, states_step_size = 1, x_t = None, orig_x = None, mask = None):
         """
         https://arxiv.org/abs/2006.11239
 
         Algorithm 2: Sampling; according to the paper
         """
 
-        x_t = np.random.normal(size = (n_sample, *image_size))
+        if mask is not None:
+            assert orig_x is not None
+            assert orig_x.shape == mask.shape
+
+        if x_t is None:
+            if orig_x is None:
+                x_t = np.random.normal(size = (sample_num, *image_size))
+            else:
+                x_t = np.random.normal(size = orig_x.shape)
+
         x_ts = []
         for t in tqdm(reversed(range(0, self.timesteps)), desc = 'ddpm denoisinig samples', total = self.timesteps):
-            noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
-            epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(n_sample, *image_size)
+            noise = np.random.normal(size = x_t.shape) if t > 1 else 0
+            epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(x_t.shape)
 
             x_t = self.inv_sqrt_alphas[t] * (x_t - epsilon * self.scaled_alphas[t]) + self.sqrt_betas[t] * noise
             # x_t = self.sqrt_recip_alphas[t] * (x_t - self.betas[t] * epsilon / self.sqrt_one_minus_alphas_cumprod[t]) + np.sqrt(self.posterior_variance[t]) * noise
+
+            if mask is not None:
+                orig_x_noise = np.random.normal(size = orig_x.shape)
+                
+                orig_x_t = self.sqrt_alphas_cumprod[t] * orig_x + self.sqrt_one_minus_alphas_cumprod[t] * orig_x_noise
+                x_t = orig_x_t * mask + x_t * (1 - mask)
 
             if t % states_step_size == 0:
                 x_ts.append(x_t)
 
         return x_t, x_ts
 
-    def ddim_denoise_sample(self, n_sample: int, image_size: Tuple[int, int, int], states_step_size: int = 1, eta: float = 1., perform_steps: int = 100):
+    def ddim_denoise_sample(self, sample_num = None, image_size = None, states_step_size = 1, eta = 1., perform_steps = 100, x_t = None, orig_x = None, mask = None):
         """
         https://arxiv.org/abs/2010.02502
 
         Denoising Diffusion Implicit Models (DDIM) sampling; according to the paper
         """
 
-        x_t = np.random.normal(size = (n_sample, *image_size))
-        x_ts = []
+        if mask is not None:
+            assert orig_x is not None
+            assert orig_x.shape == mask.shape
 
+        if x_t is None:
+            if orig_x is None:
+                x_t = np.random.normal(size = (sample_num, *image_size))
+            else:
+                x_t = np.random.normal(size = orig_x.shape)
+
+        x_ts = []
         for t in tqdm(reversed(range(1, self.timesteps)[:perform_steps]), desc = 'ddim denoisinig samples', total = perform_steps):
-            noise = np.random.normal(size = (n_sample, *image_size)) if t > 1 else 0
-            epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(n_sample, *image_size)
+            noise = np.random.normal(size = x_t.shape) if t > 1 else 0
+            epsilon = cp.asnumpy(self.model.forward(x_t, np.array([t]) / self.timesteps, training = False)).reshape(x_t.shape)
 
             x0_t = (x_t - epsilon * np.sqrt(1 - self.alphas_cumprod[t])) / np.sqrt(self.alphas_cumprod[t])
 
@@ -144,6 +167,12 @@ class Diffusion():
             c = np.sqrt((1 - self.alphas_cumprod[t - 1]) - sigma ** 2)
 
             x_t = np.sqrt(self.alphas_cumprod[t - 1]) * x0_t - c * epsilon + sigma * noise
+
+            if mask is not None:
+                orig_x_noise = np.random.normal(size = orig_x.shape)
+                
+                orig_x_t = self.sqrt_alphas_cumprod[t] * orig_x + self.sqrt_one_minus_alphas_cumprod[t] * orig_x_noise
+                x_t = orig_x_t * mask + x_t * (1 - mask)
            
             if t % states_step_size == 0:
                 x_ts.append(x_t)
@@ -177,22 +206,6 @@ class Diffusion():
             return Image.fromarray(images_array.squeeze(axis = 2)).convert("L")
         else:
             return Image.fromarray(images_array)
-
-    def generate_sample(self, image_path = None, x_num = 5, y_num = 5, margin = 10, image_size = (3, 32, 32), step_size = 10, sample_method = 'ddpm'):
-
-        if sample_method == 'ddpm':
-            denoise_sample = self.ddpm_denoise_sample
-        elif sample_method == 'ddim':
-            denoise_sample = self.ddim_denoise_sample
-    
-        samples = denoise_sample(x_num * y_num, image_size, states_step_size = step_size)[0]
-        images_grid = self.get_images_set(x_num, y_num, margin, samples, image_size)
-
-        if image_path is not None:
-            images_grid.save(image_path)
-        
-        return images_grid
-
 
 
     def train(self, dataset, epochs, batch_size, save_every_epochs, image_path, save_path, image_size):
