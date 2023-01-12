@@ -23,6 +23,10 @@ from diffusion.architectures import SimpleUNet
 
 import matplotlib.pyplot as plt
 
+
+image_size = (3, 32, 32)
+
+
 def prepare_data(path):
     
     from PIL import Image
@@ -35,7 +39,7 @@ def prepare_data(path):
     training_inputs = []
     for image in tqdm(images, desc = 'preparing data'):
         image = Image.open(path + "/" + image)
-        image = image.resize((32, 32))
+        image = image.resize((image_size[1], image_size[2]))
         image = np.asarray(image)
         image = image.transpose(2, 0, 1)
         image = image / 127.5 - 1
@@ -50,12 +54,7 @@ else:
     training_inputs = np.load("dataset/utkface/UTKFace.npy")
 
 
-
-
-
-image_size = (3, 32, 32)
-
-diffusion = Diffusion(model = SimpleUNet(image_channels = 3, image_size = 32, down_channels = (128, 256, 512, 1024), up_channels = (1024, 512, 256, 128))
+diffusion = Diffusion(model = SimpleUNet(image_channels = 3, image_size = image_size[1], down_channels = (128, 256, 512, 1024), up_channels = (1024, 512, 256, 128))
                     , timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4)) #alpha = 2e-4
 
 if not os.path.exists("diffusion/saved models/utkface_model"):

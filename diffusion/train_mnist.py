@@ -42,10 +42,10 @@ def prepare_data(data):
 
         line = raw_line.split(',')
     
-        inputs.append(np.asfarray(line[1:]).reshape(1, 28, 28) / 127.5 - 1)#/ 255 [0; 1]  #/ 127.5-1 [-1; 1]
+        inputs.append(np.asfarray(line[1:]).reshape(*image_size) / 127.5 - 1)#/ 255 [0; 1]  #/ 127.5-1 [-1; 1]
         targets.append(int(line[0]))
 
-    return inputs, targets
+    return np.array(inputs), np.array(targets)
 
 if not os.path.exists("dataset/mnist/mnist_train.npy"):
     training_inputs, training_targets = prepare_data(training_data)
@@ -57,7 +57,19 @@ else:
 
 
 
-diffusion = Diffusion(model = SimpleUNet(image_channels = 1, image_size = 28, down_channels = (32, 64, 128), up_channels = (128, 64, 32)), timesteps = 300, beta_start = 0.0001, beta_end = 0.02, criterion = MSE(), optimizer = Adam(alpha = 2e-4))
+diffusion = Diffusion(
+    model = SimpleUNet(
+        image_channels = 1, 
+        image_size = image_size[1], 
+        down_channels = (32, 64, 128), 
+        up_channels = (128, 64, 32)
+        ), 
+    timesteps = 300, 
+    beta_start = 0.0001, 
+    beta_end = 0.02, 
+    criterion = MSE(), 
+    optimizer = Adam(alpha = 2e-4)
+    )
 
 if not os.path.exists("diffusion/saved models/mnist_model"):
     diffusion.train(training_inputs, epochs = 30, batch_size = 10, save_every_epochs = 1, image_path = f"images/mnist", save_path = f"diffusion/saved models/mnist_model", image_size = image_size)
