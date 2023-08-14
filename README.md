@@ -1,6 +1,6 @@
 # numpy-diffusion (under development)
 
-## What it is?
+## What is it?
 This is a numpy implementation of the Denoising Diffusion Probabilistic Model (DDPM), that runs at CPU with numpy or GPU with cupy (but it's better to train it on a GPU if you don't want to wait indefinitely)
 
 Some methods were borrowed from my [numpy-nn-model](https://github.com/AkiRusProd/numpy-nn-model) repository.
